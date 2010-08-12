@@ -11,11 +11,11 @@
 
 // the Proportional control constant
 #define Kp 1
+// the Derivative control constant 
+#define Kd  10
 
 // the Integral control constant (not used yet)
 #define Ki  0
-// the Derivative control constant (not used yet)
-#define Kd  0
 
 
 MAX6675 thermocouple(MAX_CLK, MAX_CS, MAX_DATA);
@@ -28,6 +28,9 @@ LiquidCrystal lcd(8,9,10,11,12,13);
 
 volatile long seconds_time = 0;  // this will get incremented once a second
 volatile float the_temperature;  // in celsius
+volatile float previous_temperature;  // the last reading (1 second ago)
+
+// the current temperature
 float target_temperature;
 
 int relay_state;       // whether the relay pin is high (on) or low (off)
@@ -37,7 +40,7 @@ void setup() {
   Serial.println("Reflowduino!");
 
   // The data header (we have a bunch of data to track)
-  Serial.println("Time (s)\tTemp (C)\tError\tProportional Controller\tRelay");
+  Serial.println("Time (s)\tTemp (C)\tError\tSlope\tPD Controller\tRelay");
  
   // the relay pin controls the plate
   pinMode(RELAYPIN, OUTPUT);
@@ -74,11 +77,13 @@ void loop() {
 
   float MV; // Manipulated Variable (ie. whether to turn on or off the relay!)
   float Error; // how off we are
+  float Slope; // the change per second of the error
   
   Error = target_temperature - the_temperature;
+  Slope = previous_temperature - the_temperature;
   
-  // proportional controller only
-  MV = Kp * Error;
+  // proportional-derivative controller only
+  MV = Kp * Error + Kd * Slope;
   
   // Since we just have a relay, we'll decide 1.0 is 'relay on' and less than 1.0 is 'relay off'
   // this is an arbitrary number, we could pick 100 and just multiply the controller values
@@ -100,7 +105,7 @@ SIGNAL(TIMER1_COMPA_vect) {
   seconds_time++;
 
   // save the last reading for our slope calculation
-  float previous_temperature = the_temperature;
+  previous_temperature = the_temperature;
 
   // we will want to know the temperauter in the main loop()
   // instead of constantly reading it, we'll just use this interrupt
@@ -127,7 +132,9 @@ SIGNAL(TIMER1_COMPA_vect) {
   Serial.print("\t");
   Serial.print(target_temperature - the_temperature); // the Error!
   Serial.print("\t");
-  Serial.print(Kp*(target_temperature - the_temperature)); //  controller output
+  Serial.print(previous_temperature - the_temperature); // the Slope!
+  Serial.print("\t");
+  Serial.print(Kp*(target_temperature - the_temperature) + Kd*(previous_temperature - the_temperature)); //  controller output
   Serial.print("\t");
   Serial.println(relay_state);
 } 
