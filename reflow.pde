@@ -9,6 +9,9 @@
 #define MAX_CS 6
 #define MAX_DATA 7
 
+// the Derivative constant
+#define KD 4
+
 MAX6675 thermocouple(MAX_CLK, MAX_CS, MAX_DATA);
 
 // Classic 16x2 LCD used
@@ -19,6 +22,8 @@ LiquidCrystal lcd(8,9,10,11,12,13);
 
 volatile long seconds_time = 0;  // this will get incremented once a second
 volatile float the_temperature;  // in celsius
+volatile float temperature_slope;   // the rate of change (per second)
+float target_temperature;
 
 int relay_state;       // whether the relay pin is high (on) or low (off)
 
@@ -26,6 +31,9 @@ void setup() {
   Serial.begin(9600); 
   Serial.println("Reflowduino!");
 
+  // The data header (we have a bunch of data to track)
+  Serial.println("Time (s)\tTemp (C)\tError\tRelay");
+ 
   // the relay pin controls the plate
   pinMode(RELAYPIN, OUTPUT);
   // ...and turn it off to start!
@@ -51,6 +59,8 @@ void setup() {
   TCCR1B = _BV(WGM12) | _BV(CS10) | _BV(CS12);    // CTC & clock div 1024
   OCR1A = 15609;                                 // 16mhz / 1024 / 15609 = 1 Hz
   TIMSK1 = _BV(OCIE1A);                          // turn on interrupt
+  
+  target_temperature = 100.0;  // 100 degrees C
 }
 
 void loop() { 
@@ -61,7 +71,7 @@ void loop() {
   // do the most stupid thing - turn on the relay if the temperature is too low 
   // and turn it off when its too high!
   
-  if (the_temperature < 100) {
+  if (the_temperature < target_temperature) {
     relay_state = HIGH;
     digitalWrite(RELAYPIN, HIGH);
   } else {
@@ -73,8 +83,12 @@ void loop() {
 
 // This is the Timer 1 CTC interrupt, it goes off once a second
 SIGNAL(TIMER1_COMPA_vect) { 
+  
   // time moves forward!
   seconds_time++;
+
+  // save the last reading for our slope calculation
+  float previous_temperature = the_temperature;
 
   // we will want to know the temperauter in the main loop()
   // instead of constantly reading it, we'll just use this interrupt
@@ -98,6 +112,8 @@ SIGNAL(TIMER1_COMPA_vect) {
   Serial.print(seconds_time);
   Serial.print("\t");
   Serial.print(the_temperature);
+  Serial.print("\t");
+  Serial.print(target_temperature - the_temperature); // the Error!
   Serial.print("\t");
   Serial.println(relay_state);
 } 
