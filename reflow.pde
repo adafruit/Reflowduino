@@ -26,6 +26,11 @@ void setup() {
   // compile date
   lcd.print(__DATE__);
   
+  // Setup 1 Hz timer to refresh display using 16 Timer 1
+  TCCR1A = 0;                           // CTC mode (interrupt after timer reaches OCR1A)
+  TCCR1B = _BV(WGM12) | _BV(CS10) | _BV(CS12);    // CTC & clock div 1024
+  OCR1A = 15609;                                 // 16mhz / 1024 / 15609 = 1 Hz
+  TIMSK1 = _BV(OCIE1A);                          // turn on interrupt
   
   // pause for dramatic effect!
   delay(2000);
@@ -49,3 +54,8 @@ void loop() {
   
   delay(1000);
 }
+
+// This is the Timer 1 CTC interrupt, it goes off once a second
+SIGNAL(TIMER1_COMPA_vect) { 
+   Serial.print(".");
+} 
