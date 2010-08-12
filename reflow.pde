@@ -10,13 +10,11 @@
 #define MAX_DATA 7
 
 // the Proportional control constant
-#define Kp 1
+#define Kp  10
+// the Integral control constant
+#define Ki  0.02
 // the Derivative control constant 
-#define Kd  10
-
-// the Integral control constant (not used yet)
-#define Ki  0
-
+#define Kd  100
 
 MAX6675 thermocouple(MAX_CLK, MAX_CS, MAX_DATA);
 
@@ -33,14 +31,22 @@ volatile float previous_temperature;  // the last reading (1 second ago)
 // the current temperature
 float target_temperature;
 
+// we need this to be a global variable because we add error each second
+float Summation;        // The integral of error since time = 0
+
 int relay_state;       // whether the relay pin is high (on) or low (off)
 
 void setup() {  
   Serial.begin(9600); 
   Serial.println("Reflowduino!");
-
+  
+  // Now that we are mucking with stuff, we should track our variables
+  Serial.print("Kp = "); Serial.print(Kp);
+  Serial.print(" Ki = "); Serial.print(Ki);
+  Serial.print(" Kd = "); Serial.println(Kd);
+  
   // The data header (we have a bunch of data to track)
-  Serial.println("Time (s)\tTemp (C)\tError\tSlope\tPD Controller\tRelay");
+  Serial.println("Time (s)\tTemp (C)\tError\tSlope\tSummation\tPID Controller\tRelay");
  
   // the relay pin controls the plate
   pinMode(RELAYPIN, OUTPUT);
@@ -61,16 +67,20 @@ void setup() {
   // pause for dramatic effect!
   delay(2000);
   lcd.clear();
+
+  // where we want to be
+  target_temperature = 100.0;  // 100 degrees C
+  // set the integral to 0
+  Summation = 0;
   
   // Setup 1 Hz timer to refresh display using 16 Timer 1
   TCCR1A = 0;                           // CTC mode (interrupt after timer reaches OCR1A)
   TCCR1B = _BV(WGM12) | _BV(CS10) | _BV(CS12);    // CTC & clock div 1024
   OCR1A = 15609;                                 // 16mhz / 1024 / 15609 = 1 Hz
   TIMSK1 = _BV(OCIE1A);                          // turn on interrupt
-  
-  target_temperature = 100.0;  // 100 degrees C
 }
 
+ 
 void loop() { 
   // we moved the LCD code into the interrupt so we don't have to worry about updating the LCD 
   // or reading from the thermocouple in the main loop
@@ -78,12 +88,14 @@ void loop() {
   float MV; // Manipulated Variable (ie. whether to turn on or off the relay!)
   float Error; // how off we are
   float Slope; // the change per second of the error
+ 
   
   Error = target_temperature - the_temperature;
   Slope = previous_temperature - the_temperature;
+  // Summation is done in the interrupt
   
   // proportional-derivative controller only
-  MV = Kp * Error + Kd * Slope;
+  MV = Kp * Error + Ki * Summation + Kd * Slope;
   
   // Since we just have a relay, we'll decide 1.0 is 'relay on' and less than 1.0 is 'relay off'
   // this is an arbitrary number, we could pick 100 and just multiply the controller values
@@ -112,6 +124,9 @@ SIGNAL(TIMER1_COMPA_vect) {
   // to track it and save it once a second to 'the_temperature'
   the_temperature = thermocouple.readCelsius();
   
+  // Sum the error over time
+  Summation += target_temperature - the_temperature;
+  
   // display current time and temperature
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -132,9 +147,11 @@ SIGNAL(TIMER1_COMPA_vect) {
   Serial.print("\t");
   Serial.print(target_temperature - the_temperature); // the Error!
   Serial.print("\t");
-  Serial.print(previous_temperature - the_temperature); // the Slope!
+  Serial.print(previous_temperature - the_temperature); // the Slope of the Error
   Serial.print("\t");
-  Serial.print(Kp*(target_temperature - the_temperature) + Kd*(previous_temperature - the_temperature)); //  controller output
+  Serial.print(Summation); // the Integral of Error
+  Serial.print("\t");
+  Serial.print(Kp*(target_temperature - the_temperature) + Ki*Summation + Kd*(previous_temperature - the_temperature)); //  controller output
   Serial.print("\t");
   Serial.println(relay_state);
 } 
