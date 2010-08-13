@@ -12,9 +12,12 @@
 // the Proportional control constant
 #define Kp  10
 // the Integral control constant
-#define Ki  0.02
+#define Ki  0.5
 // the Derivative control constant 
 #define Kd  100
+
+// Windup error prevention, 5% by default
+#define WINDUPPERCENT 0.05  
 
 MAX6675 thermocouple(MAX_CLK, MAX_CS, MAX_DATA);
 
@@ -40,14 +43,14 @@ void setup() {
   Serial.begin(9600); 
   Serial.println("Reflowduino!");
   
-  // Now that we are mucking with stuff, we should track our variables
-  Serial.print("Kp = "); Serial.print(Kp);
+  // The data header (we have a bunch of data to track)
+  Serial.print("Time (s)\tTemp (C)\tError\tSlope\tSummation\tPID Controller\tRelay");
+ 
+   // Now that we are mucking with stuff, we should track our variables
+  Serial.print("\t\tKp = "); Serial.print(Kp);
   Serial.print(" Ki = "); Serial.print(Ki);
   Serial.print(" Kd = "); Serial.println(Kd);
   
-  // The data header (we have a bunch of data to track)
-  Serial.println("Time (s)\tTemp (C)\tError\tSlope\tSummation\tPID Controller\tRelay");
- 
   // the relay pin controls the plate
   pinMode(RELAYPIN, OUTPUT);
   // ...and turn it off to start!
@@ -127,6 +130,12 @@ SIGNAL(TIMER1_COMPA_vect) {
   // Sum the error over time
   Summation += target_temperature - the_temperature;
   
+  if ( (the_temperature < (target_temperature * (1.0 - WINDUPPERCENT))) ||
+       (the_temperature > (target_temperature * (1.0 + WINDUPPERCENT))) ) {
+        // to avoid windup, we only integrate within 5%
+         Summation = 0;
+   }
+
   // display current time and temperature
   lcd.clear();
   lcd.setCursor(0, 0);
