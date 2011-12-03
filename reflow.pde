@@ -1,5 +1,6 @@
 #include <LiquidCrystal.h>
 #include <max6675.h>
+#include <Wire.h>
 
 // The pin we use to control the relay
 #define RELAYPIN 4
@@ -146,7 +147,11 @@ SIGNAL(TIMER1_COMPA_vect) {
   // go to line #1
   lcd.setCursor(0,1);
   lcd.print(the_temperature);
+#if ARDUINO >= 100
+  lcd.write(0xDF);
+#else
   lcd.print(0xDF, BYTE);
+#endif
   lcd.print("C ");
   
   // print out a log so we can see whats up
